@@ -11,6 +11,13 @@ protocol BuilderProtocol {
     func createRootVC(viewController: RootViewControllerProtocol,
                       presenter: PresenterProtocol,
                       model: ModelProtocol) -> RootViewController
+    
+    func createEditTaskVC(presentetionType: EditTaskVCType,
+                          indexPath: IndexPath?,
+                          viewController: EditTaskViewControllerProtocol,
+                          presenter: EditTaskPresenterProtocol,
+                          model: EditTaskModelProtocol,
+                          delegate: EditTaskPresenterDelegate) -> EditTaskViewController
 }
 
 final class Builder: BuilderProtocol {
@@ -20,12 +27,27 @@ final class Builder: BuilderProtocol {
                       model: ModelProtocol = Model()
     ) -> RootViewController {
         let vc = viewController
-        let presenter = presenter
         presenter.model = model
-        presenter.loadData()
         presenter.view = vc
         vc.presenter = presenter
         return vc as! RootViewController
+    }
+    
+    func createEditTaskVC(presentetionType: EditTaskVCType,
+                          indexPath: IndexPath? = nil,
+                          viewController: EditTaskViewControllerProtocol = EditTaskViewController(),
+                          presenter: EditTaskPresenterProtocol = EditTaskPresenter(),
+                          model: EditTaskModelProtocol,
+                          delegate: EditTaskPresenterDelegate
+    ) -> EditTaskViewController {
+        let vc = viewController
+        presenter.model = model
+        model.indexPath = indexPath
+        presenter.view = vc
+        presenter.delegate = delegate
+        vc.presentetionType = presentetionType
+        vc.presenter = presenter
+        return vc as! EditTaskViewController
     }
     
 }

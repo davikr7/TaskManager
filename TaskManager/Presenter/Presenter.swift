@@ -10,9 +10,12 @@ import Foundation
 protocol PresenterProtocol: AnyObject {
     var model: ModelProtocol! { get set }
     var view: RootViewControllerProtocol! { get set }
-    var controllerTitle: String { get }
+    
+    var isEmptyList: Bool { get }
+    var currentListName: String? { get }
     func renameList(_ name: String)
     func removeList()
+    func removeTask(for indexPath: IndexPath)
     
     var tableViewNumberOfRow: Int { get }
     func tableViewDataSource(_ indexPath: IndexPath) -> Task
@@ -22,46 +25,35 @@ protocol PresenterProtocol: AnyObject {
     var collectionViewNumberOfRow: Int { get }
     
     func addNewListWith(_ name: String)
-    func loadData()
+    func isCurrentList(for indexPath: IndexPath) -> Bool
+    func addTask()
+    func getEditTaskViewController(presentetionType: EditTaskVCType, for indexPath: IndexPath?) -> EditTaskViewController
 }
 
 final class Presenter: PresenterProtocol {
     
     var model: ModelProtocol!
-    let storage = DataStorage()
+    let builder = Builder()
     weak var view: RootViewControllerProtocol!
     
-    private var selectedList: Int = 0
-    
-    func loadData() {
-        storage.getData { lists in
-            if let lists = lists {
-                model.lists = lists
-                selectedList = storage.getSelectedIndexKey()
-            } else {
-                view.showAlert()
-            }
-        }
+    var isEmptyList: Bool {
+        return model.lists.isEmpty
     }
     
-    func saveData() {
-        storage.saveData(model.lists) { success in
-            if !success {
-                view.showAlert()
-            }
-        }
+    func isCurrentList(for indexPath: IndexPath) -> Bool {
+        model.selectedList == indexPath.item
     }
     
-    var controllerTitle: String {
-        model.lists[selectedList].name
+    var currentListName: String? {
+        isEmptyList ? nil : model.lists[model.selectedList].name
     }
     
     func tableViewDataSource(_ indexPath: IndexPath) -> Task {
-        model.lists[selectedList].tasks[indexPath.row]
+        model.lists[model.selectedList].tasks[indexPath.row]
     }
     
     var tableViewNumberOfRow: Int {
-        model.lists[selectedList].taskCount
+        isEmptyList ? 0 : model.lists[model.selectedList].taskCount
     }
     
     var collectionViewNumberOfRow: Int {
@@ -73,27 +65,76 @@ final class Presenter: PresenterProtocol {
     }
     
     func selectList(_ indexPath: IndexPath) {
-        selectedList = indexPath.item
-        storage.saveSelectedListIndex(indexPath.item)
+        model.selectedList = indexPath.item
         view.reloadView()
     }
     
     func addNewListWith(_ name: String) {
         model.lists.append(.init(name: name, tasks: []))
         view.reloadView()
-        saveData()
     }
     
     func renameList(_ name: String) {
-        model.lists[selectedList].name = name
+        model.lists[model.selectedList].name = name
         view.reloadView()
-        saveData()
     }
     
     func removeList() {
-        model.lists.remove(at: selectedList)
+        model.lists.remove(at: model.selectedList)
+        if model.selectedList == model.listCount && model.selectedList > 0 {
+            model.selectedList -= 1
+        }
         view.reloadView()
-        saveData()
+    }
+    
+    func addTask() {
+        model.lists[model.selectedList].tasks.append(.mock)
+        view.reloadView()
+    }
+    
+    func removeTask(for indexPath: IndexPath) {
+        model.lists[model.selectedList].tasks.remove(at: indexPath.row)
+        view.reloadView()
+    }
+    
+    func getEditTaskViewController(presentetionType: EditTaskVCType, for indexPath: IndexPath? = nil) -> EditTaskViewController {
+        if let indexPath = indexPath {
+            let task = model.lists[model.selectedList].tasks[indexPath.row]
+            return builder.createEditTaskVC(presentetionType: presentetionType,
+                                            indexPath: indexPath,
+                                            model: EditTaskModel(task: task),
+                                            delegate: self)
+        } else {
+            return builder.createEditTaskVC(presentetionType: presentetionType,
+                                            model: EditTaskModel(),
+                                            delegate: self)
+        }
+    }
+    
+}
+
+//MARK: - EditTaskPresenterDelegate
+
+extension Presenter: EditTaskPresenterDelegate {
+    func taskCreated(_ task: Task, indexPath: IndexPath?) {
+        if let indexPath = indexPath {
+            model.lists[model.selectedList].tasks[indexPath.row].title = task.title
+            model.lists[model.selectedList].tasks[indexPath.row].body = task.body
+        } else {
+            model.lists[model.selectedList].tasks.append(task)
+        }
+        view.reloadView()
+    }
+    
+}
+
+//MARK: - TaskCellDelegate
+
+extension Presenter: TaskCellDelegate {
+    
+    func checkboxDidTap(_ cell: TaskCell) {
+        guard let indexPath = cell.indexPath else { return }
+        model.lists[model.selectedList].tasks[indexPath.row].isDone = cell.isDone
     }
     
 }
